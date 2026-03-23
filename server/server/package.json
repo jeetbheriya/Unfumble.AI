@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "bullmq": "^5.71.0",
+    "xstate": "^5.28.0"
+  }
+}

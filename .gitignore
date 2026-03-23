@@ -1,0 +1,13 @@
+# Folders to exclude
+Extra/
+node_modules/
+.env
+
+# Build outputs
+dist/
+build/
+
+# IDE and OS files
+.DS_Store
+.vscode/
+.idea/
