@@ -13,11 +13,31 @@ export const parseResume = async (fileBuffer) => {
     console.log('PDF-PARSE: Initializing parser with buffer length:', fileBuffer.length);
     
     // Modern PDF-Parse (ESM version) uses the PDFParse class
-    const parser = new PDFParse({ data: new Uint8Array(fileBuffer) });
-    const result = await parser.getText();
-    
-    // Important: destroy the parser instance to free memory
-    await parser.destroy();
+    let parser;
+    try {
+        parser = new PDFParse({ data: new Uint8Array(fileBuffer) });
+    } catch (initErr) {
+        console.error('PDF-PARSE: Initialization error:', initErr);
+        throw new Error(`Failed to initialize PDF parser: ${initErr.message}`);
+    }
+
+    let result;
+    try {
+        result = await parser.getText();
+        console.log('PDF-PARSE: Text extraction result:', !!result?.text);
+    } catch (textErr) {
+        console.error('PDF-PARSE: Extraction error:', textErr);
+        throw new Error(`Failed to extract text from PDF: ${textErr.message}`);
+    } finally {
+        if (parser) {
+            try {
+                await parser.destroy();
+                console.log('PDF-PARSE: Parser instance destroyed.');
+            } catch (destErr) {
+                console.warn('PDF-PARSE: Destroy error (non-critical):', destErr.message);
+            }
+        }
+    }
 
     let extractedText = result.text;
 

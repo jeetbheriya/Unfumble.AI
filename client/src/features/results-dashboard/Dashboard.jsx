@@ -21,16 +21,17 @@ const Dashboard = ({ sessionId }) => {
     const fetchData = async () => {
       try {
         const token = await getToken();
+        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
         const headers = { Authorization: `Bearer ${token}` };
 
         // Fetch current session
-        const res = await axios.get(`/api/interview/results/${sessionId}`, { headers });
+        const res = await axios.get(`${API_BASE_URL}/api/interview/results/${sessionId}`, { headers });
         setData(res.data);
 
         // Fetch growth analytics if we have a userId
         if (res.data.userId) {
           try {
-            const growthRes = await axios.get(`/api/interview/growth/${res.data.userId}`, { headers });
+            const growthRes = await axios.get(`${API_BASE_URL}/api/interview/growth/${res.data.userId}`, { headers });
             setGrowth(growthRes.data);
           } catch (gErr) {
             console.warn('Growth fetch error (expected for first-timers):', gErr.message);
@@ -38,7 +39,7 @@ const Dashboard = ({ sessionId }) => {
         }
 
         // Fetch history
-        const historyRes = await axios.get('/api/interview/history', { headers });
+        const historyRes = await axios.get(`${API_BASE_URL}/api/interview/history`, { headers });
         setHistory(historyRes.data);
       } catch (err) {
         console.error('Fetch Error:', err);

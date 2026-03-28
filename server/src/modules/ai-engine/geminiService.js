@@ -16,10 +16,13 @@ const extractJson = (text) => {
   
   let cleaned = text.trim();
 
-  // 1. Remove Markdown code blocks if they exist
-  // Matches ```json { ... } ``` or just ``` { ... } ```
-  cleaned = cleaned.replace(/^```(?:json)?\s*/i, '');
-  cleaned = cleaned.replace(/\s*```$/i, '');
+  // 1. More robust markdown stripping
+  // Matches any block between triple backticks, potentially with 'json' label
+  const markdownRegex = /```(?:json)?\s*([\s\S]*?)\s*```/i;
+  const match = cleaned.match(markdownRegex);
+  if (match && match[1]) {
+    cleaned = match[1].trim();
+  }
 
   try {
     // 2. Try direct parse on cleaned text
@@ -27,18 +30,25 @@ const extractJson = (text) => {
   } catch (e) {
     try {
       // 3. Fallback: regex for the first { and last }
-      // This is very robust for extracting the core JSON object
+      // This is very robust for extracting the core JSON object if the model was chatty
       const firstBrace = cleaned.indexOf('{');
       const lastBrace = cleaned.lastIndexOf('}');
       
       if (firstBrace !== -1 && lastBrace !== -1) {
         const jsonString = cleaned.substring(firstBrace, lastBrace + 1);
-        return JSON.parse(jsonString);
+        try {
+            return JSON.parse(jsonString);
+        } catch (innerError) {
+            console.error("JSON.parse error on substring:", innerError.message);
+            // Log a snippet of the problematic string for easier debugging
+            console.error("String snippet:", jsonString.substring(0, 100) + "...");
+            throw innerError;
+        }
       }
       throw new Error("No JSON object found in text.");
     } catch (e2) {
       console.error("Final JSON parse attempt failed. Raw text was:", text);
-      throw new Error("AI response contained invalid JSON structure.");
+      throw new Error(`AI response contained invalid JSON structure: ${e2.message}`);
     }
   }
 };
@@ -158,11 +168,22 @@ const callGeminiDynamic = async (prompt, temperature = 0.7, retries = 3) => {
   
   for (let i = 0; i < retries; i++) {
     try {
+      // Configure for JSON mode if it's a 1.5+ model
+      const isJsonCapable = modelName.includes('1.5') || modelName.includes('2.0') || modelName.includes('pro') || modelName.includes('flash');
+      
+      const generationConfig = { 
+        temperature, 
+        topP: 0.95, 
+        topK: 40,
+        responseMimeType: isJsonCapable ? "application/json" : "text/plain"
+      };
+
       const model = genAI.getGenerativeModel({ 
         model: modelName, 
-        generationConfig: { temperature, topP: 0.95, topK: 40 } 
+        generationConfig
       });
 
+      console.log(`GEMINI: Calling ${modelName} (JSON Mode: ${isJsonCapable ? 'ON' : 'OFF'})...`);
       const result = await model.generateContent(prompt);
       const response = await result.response;
       
@@ -209,6 +230,7 @@ const callGeminiDynamic = async (prompt, temperature = 0.7, retries = 3) => {
       
       console.error(`GEMINI: Failed using model '${modelName}'. Error: ${errorMessage}`);
       if (i === retries - 1) throw error;
+      await sleep(1000);
     }
   }
 };

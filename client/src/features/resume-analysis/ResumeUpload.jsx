@@ -31,9 +31,10 @@ const ResumeUpload = ({ onProcessed }) => {
 
     try {
       const token = await getToken();
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
       console.log('Token retrieved from Clerk:', token ? 'YES (Length: ' + token.length + ')' : 'NO');
-      console.log('Sending request to /api/interview/upload-resume...');
-      const response = await axios.post('/api/interview/upload-resume', formData, {
+      console.log(`Sending request to ${API_BASE_URL}/api/interview/upload-resume...`);
+      const response = await axios.post(`${API_BASE_URL}/api/interview/upload-resume`, formData, {
         headers: {
           Authorization: `Bearer ${token}`
         }

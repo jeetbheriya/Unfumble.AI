@@ -64,7 +64,8 @@ const InterviewRoom = ({ sessionData, onComplete }) => {
     const startInterview = async () => {
       try {
         const token = await getToken();
-        const res = await axios.post('/api/interview/start-session', { 
+        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+        const res = await axios.post(`${API_BASE_URL}/api/interview/start-session`, { 
           userId: user._id, role, stack, firstQuestion, questions, resumeText
         }, {
           headers: { Authorization: `Bearer ${token}` }
@@ -112,7 +113,8 @@ const InterviewRoom = ({ sessionData, onComplete }) => {
     setLoading(true);
     try {
       const token = await getToken();
-      const res = await axios.post('/api/interview/submit-turn', {
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+      const res = await axios.post(`${API_BASE_URL}/api/interview/submit-turn`, {
         sessionId,
         userMessage: message
       }, {

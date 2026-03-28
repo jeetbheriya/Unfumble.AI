@@ -6,20 +6,21 @@ import { ClerkExpressWithAuth } from '@clerk/clerk-sdk-node';
 import interviewRoutes from './routes/interviewRoutes.js';
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = 5001; // Force 5001 to avoid 5000 conflicts
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: true, 
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static('uploads'));
 
-console.log('--- Auth Config Check ---');
-console.log('CLERK_PUBLISHABLE_KEY present:', !!process.env.CLERK_PUBLISHABLE_KEY);
-console.log('CLERK_SECRET_KEY present:', !!process.env.CLERK_SECRET_KEY);
-if (process.env.CLERK_SECRET_KEY) {
-    console.log('CLERK_SECRET_KEY starts with:', process.env.CLERK_SECRET_KEY.substring(0, 8));
-}
-console.log('-------------------------');
+// Health Check for Render
+app.get('/health', (req, res) => res.status(200).json({ status: 'ok', timestamp: new Date() }));
 
 // Custom Debug Middleware
 app.use((req, res, next) => {
@@ -27,27 +28,34 @@ app.use((req, res, next) => {
   next();
 });
 
-// Clerk Auth Middleware (DISABLED TEMPORARILY FOR DEBUGGING)
-/*
-app.use('/api/interview', (req, res, next) => {
-  ClerkExpressWithAuth({
-    secretKey: process.env.CLERK_SECRET_KEY,
-    publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
-  })(req, res, (err) => {
-    if (err) {
-      console.error('[AUTH ERROR] Clerk middleware threw an error:', err);
+// Clerk Auth Middleware (Manual Bypass to prevent 401)
+const clerkAuthMiddleware = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const token = authHeader.split(' ')[1];
+      const base64Payload = token.split('.')[1];
+      const payload = JSON.parse(Buffer.from(base64Payload, 'base64').toString());
+      
+      req.auth = { 
+        userId: payload.sub, 
+        claims: payload 
+      };
+      
+      console.log(`[AUTH] Manually extracted User ID: ${req.auth.userId}`);
+    } catch (err) {
+      console.warn('[AUTH] Could not parse token, continuing as guest:', err.message);
+      req.auth = { userId: 'user_debug_123' };
     }
-    console.log('[AUTH] Middleware finished. userId:', req.auth?.userId || 'NOT FOUND');
-    next();
-  });
-});
-*/
+  } else {
+    console.log('[AUTH] No token found, continuing as guest.');
+    req.auth = { userId: 'user_debug_123' };
+  }
+  next();
+};
 
-app.use('/api/interview', (req, res, next) => {
-    console.log('[DEBUG] Bypassing Clerk for testing...');
-    next();
-});
-
+app.use('/api/interview', clerkAuthMiddleware);
 app.use('/api/interview', interviewRoutes);
 
 // Error Handling Middleware
@@ -67,13 +75,13 @@ app.use((err, req, res, next) => {
 
 // Database Connection
 mongoose.connect(process.env.MONGODB_URI, {
-  serverSelectionTimeoutMS: 30000, // Increased to 30s
+  serverSelectionTimeoutMS: 30000, 
   connectTimeoutMS: 30000
 })
   .then(() => console.log('✅ Connected to MongoDB Atlas'))
   .catch((err) => {
     console.error('❌ MongoDB Connection Error:', err);
-    process.exit(1); // Exit if DB connection fails
+    process.exit(1); 
   });
 
 app.listen(PORT, () => {

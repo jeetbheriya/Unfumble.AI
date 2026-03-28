@@ -18,17 +18,22 @@ export const processResume = async (req, res) => {
   try {
     console.log('--- START PROCESS RESUME LOGIC ---');
     if (!req.file) {
-      console.warn('ProcessResume: No file uploaded');
-      return res.status(400).json({ message: 'No file' });
+      console.warn('ProcessResume: No file uploaded (req.file is missing)');
+      return res.status(400).json({ message: 'No file uploaded. Please ensure the field name is "resume".' });
     }
 
-    console.log('DEBUG: req.auth:', JSON.stringify(req.auth, null, 2));
+    console.log('File Info:', {
+      fieldname: req.file.fieldname,
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size
+    });
+
     let clerkId = req.auth?.userId;
     
     // --- DEBUG FALLBACK ---
     if (!clerkId) {
         console.warn('ProcessResume: No clerkId found, using DEBUG_USER for trace.');
-        // Use a dummy ID for testing purposes only
         clerkId = 'user_debug_123'; 
     }
     // --- END DEBUG FALLBACK ---
@@ -36,12 +41,10 @@ export const processResume = async (req, res) => {
     console.log('ProcessResume: Finding/Creating User for clerkId:', clerkId);
     let user;
     try {
-      // 1. Try to find user by clerkId first
       user = await User.findOne({ clerkId: clerkId });
 
       if (!user && req.body.email) {
           console.log('ProcessResume: User not found by clerkId, checking email:', req.body.email);
-          // 2. If not found, check if email exists (maybe they signed in with a different method before)
           user = await User.findOne({ email: req.body.email });
           if (user && !user.clerkId) {
               user.clerkId = clerkId;
@@ -59,16 +62,14 @@ export const processResume = async (req, res) => {
           });
           await user.save();
       } else {
-          // Update name if provided
           if (req.body.name) user.name = req.body.name;
           await user.save();
-          console.log('✅ Existing user record updated:', user._id);
+          console.log('✅ User record ready:', user._id);
       }
     } catch (dbError) {
       console.error('❌ Database error during user management:', dbError);
-      return res.status(500).json({ message: 'Database error', error: dbError.message });
+      return res.status(500).json({ message: 'Database error while managing user profile', error: dbError.message });
     }
-
 
     console.log('ProcessResume: Parsing PDF buffer (length:', req.file.buffer.length, ')');
     let resumeText;
@@ -77,12 +78,12 @@ export const processResume = async (req, res) => {
         console.log('✅ PDF parsing successful. Length:', resumeText.length);
     } catch (parseErr) {
         console.error('❌ PDF PARSING FAILED:', parseErr);
-        return res.status(400).json({ message: 'Could not extract text from PDF.', error: parseErr.message });
+        return res.status(400).json({ message: 'Could not extract text from PDF. Ensure it is a valid PDF file.', error: parseErr.message });
     }
 
     if (!resumeText || resumeText.length < 50) {
         console.error('❌ PDF parsing returned empty or too short text');
-        return res.status(400).json({ message: 'Could not extract text from PDF.' });
+        return res.status(400).json({ message: 'Extracted text from PDF is too short to analyze.' });
     }
     
     console.log('ProcessResume: Starting AI analysis (RAG-Aware)...');
@@ -92,7 +93,7 @@ export const processResume = async (req, res) => {
         console.log('✅ AI Analysis complete for role:', analysis.role);
     } catch (aiErr) {
         console.error('❌ AI ANALYSIS FAILED:', aiErr);
-        return res.status(500).json({ message: 'AI Analysis failed', error: aiErr.message });
+        return res.status(500).json({ message: 'AI analysis failed during resume processing', error: aiErr.message });
     }
     
     user.resumeText = resumeText;
@@ -110,7 +111,7 @@ export const processResume = async (req, res) => {
     });
   } catch (error) {
     console.error('CRITICAL ERROR in processResume:', error);
-    res.status(500).json({ message: 'Error analyzing resume', error: error.message });
+    res.status(500).json({ message: 'Internal Server Error during resume processing', error: error.message });
   }
 };
 
