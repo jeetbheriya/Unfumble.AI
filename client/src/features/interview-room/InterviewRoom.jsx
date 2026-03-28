@@ -64,7 +64,7 @@ const InterviewRoom = ({ sessionData, onComplete }) => {
     const startInterview = async () => {
       try {
         const token = await getToken();
-        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+        const API_BASE_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || '';
         const res = await axios.post(`${API_BASE_URL}/api/interview/start-session`, { 
           userId: user._id, role, stack, firstQuestion, questions, resumeText
         }, {
@@ -113,7 +113,7 @@ const InterviewRoom = ({ sessionData, onComplete }) => {
     setLoading(true);
     try {
       const token = await getToken();
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+      const API_BASE_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || '';
       const res = await axios.post(`${API_BASE_URL}/api/interview/submit-turn`, {
         sessionId,
         userMessage: message
