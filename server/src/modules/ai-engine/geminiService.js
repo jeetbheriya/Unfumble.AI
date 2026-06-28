@@ -8,6 +8,15 @@ console.log(`GEMINI: Initializing with API Key (Length: ${apiKey ? apiKey.length
 
 const genAI = new GoogleGenerativeAI(apiKey);
 
+const sanitizeJsonString = (str) => {
+  let cleaned = str.trim();
+  
+  // Strip trailing commas before closing braces/brackets
+  cleaned = cleaned.replace(/,\s*([\]}])/g, '$1');
+  
+  return cleaned;
+};
+
 /**
  * robustly extracts JSON from a string even with conversational filler or markdown.
  */
@@ -24,24 +33,27 @@ const extractJson = (text) => {
     cleaned = match[1].trim();
   }
 
+  let sanitized = sanitizeJsonString(cleaned);
+
   try {
     // 2. Try direct parse on cleaned text
-    return JSON.parse(cleaned);
+    return JSON.parse(sanitized);
   } catch (e) {
     try {
       // 3. Fallback: regex for the first { and last }
       // This is very robust for extracting the core JSON object if the model was chatty
-      const firstBrace = cleaned.indexOf('{');
-      const lastBrace = cleaned.lastIndexOf('}');
+      const firstBrace = sanitized.indexOf('{');
+      const lastBrace = sanitized.lastIndexOf('}');
       
       if (firstBrace !== -1 && lastBrace !== -1) {
-        const jsonString = cleaned.substring(firstBrace, lastBrace + 1);
+        const jsonString = sanitized.substring(firstBrace, lastBrace + 1);
+        const finalSanitized = sanitizeJsonString(jsonString);
         try {
-            return JSON.parse(jsonString);
+            return JSON.parse(finalSanitized);
         } catch (innerError) {
             console.error("JSON.parse error on substring:", innerError.message);
-            // Log a snippet of the problematic string for easier debugging
-            console.error("String snippet:", jsonString.substring(0, 100) + "...");
+            // Log the problematic string for easier debugging
+            console.error("String snippet:", finalSanitized);
             throw innerError;
         }
       }
@@ -260,7 +272,12 @@ export const analyzeResume = async (resumeText, userId = null) => {
       
       INSTRUCTION: If the user has shown weaknesses in previous sessions (mentioned in context above), prioritize generating questions that re-test those specific gaps.
 
-      Return ONLY a JSON object:
+      CRITICAL JSON FORMATTING INSTRUCTIONS:
+      1. Return ONLY a valid JSON object matching the schema below.
+      2. Do NOT use unescaped double quotes inside your generated questions or role name. Use single quotes instead (e.g., 'RAG' or 'useEffect' instead of \"RAG\" or \"useEffect\").
+      3. Ensure there are no trailing commas in arrays or objects.
+
+      JSON Schema:
       {
         "role": "string",
         "stack": ["string"],
@@ -273,7 +290,7 @@ export const analyzeResume = async (resumeText, userId = null) => {
     `;
     
     console.log("GEMINI: Starting Resume Analysis (RAG-Aware)...");
-    const text = await callGeminiDynamic(prompt, 0.8);
+    const text = await callGeminiDynamic(prompt, 0.4);
     return extractJson(text);
   } catch (error) {
     console.error("CRITICAL AI ERROR (AnalyzeResume):", error);
@@ -296,8 +313,17 @@ export const evaluateResponse = async (question, answer, context) => {
       4. Provide a brief, constructive correction or feedback (1-2 sentences).
       5. Determine if the question was technical in nature.
 
-      Output: Return ONLY a valid JSON object. No conversational filler.
-      Format: {"rating": "CORRECT"|"PARTIAL"|"WRONG", "correction": "string", "isTechnical": boolean}
+      CRITICAL JSON FORMATTING INSTRUCTIONS:
+      1. Return ONLY a valid JSON object matching the format below.
+      2. Do NOT use unescaped double quotes inside string fields (especially the 'correction' field). Use single quotes instead.
+      3. Ensure there are no trailing commas.
+
+      Format: 
+      {
+        "rating": "CORRECT" | "PARTIAL" | "WRONG", 
+        "correction": "string", 
+        "isTechnical": boolean
+      }
     `;
 
     const text = await callGeminiDynamic(prompt, 0.2);
@@ -337,14 +363,20 @@ export const analyzePerformance = async (transcript, userId = null) => {
       1. Analyze the technical accuracy, depth, and communication style of the CURRENT transcript.
       2. Compare current performance with the PAST HISTORY provided.
       3. Identify if the user has improved in areas they previously struggled with.
-      4. Return ONLY a JSON object with these EXACT field types:
-         - technical: A NUMBER (0-100)
-         - communication: A NUMBER (0-100)
-         - overall: A NUMBER (0-100)
-         - solidAreas: An array of strings (strengths)
-         - areasToImprove: An array of strings (weaknesses)
-         - areasToLearn: An array of strings (topics for further study)
-         - feedback: A single string summarizing performance and growth relative to past history (if any).
+      4. Return ONLY a valid JSON object matching the schema below.
+      5. Do NOT use unescaped double quotes inside your string fields (especially the 'feedback' field). Use single quotes instead.
+      6. Ensure there are no trailing commas.
+
+      Schema:
+      {
+        "technical": number,
+        "communication": number,
+        "overall": number,
+        "solidAreas": ["string"],
+        "areasToImprove": ["string"],
+        "areasToLearn": ["string"],
+        "feedback": "string"
+      }
 
       Example JSON:
       {
